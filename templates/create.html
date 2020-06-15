@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+
+
+<script>
+    $('#other-div').css('display', 'none'); // Hide the text input box in default
+    function myFunction() {
+        var cb = document.getElementById("self");
+        var otherDiv = document.getElementById("other-div");
+        console.log("testing");
+
+        if (cb.checked) {
+            otherDiv.style.required = "0";
+            otherDiv.style.display = "none";
+        } else {
+            otherDiv.style.required = "1";
+            otherDiv.style.display = "block";
+        }
+    }
+
+</script>
+
+<div class="container" onLoad="myFunction()">
+    <h1 class="col-sm-10 my-1" align="center">Buy Airtime</h1>
+    <form action="/" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <div class="form-row">
+
+            <div class="col-sm-10 my-1">
+                <center><label><input name="self" class="form-control" type="checkbox" value=""
+                                      checked="checked" id="self" onchange="myFunction()">Self</label></center>
+            </div>
+
+            <div class="col-sm-10 my-1" id="self-div" name="self-div">
+                <center><label>Safaricom Number: <input type="text" class="form-control" name="own_phone" required="1"
+                                                        value="{{ own_phone }}" placeholder="07XX XXX XXX"></label>
+                </center>
+            </div>
+
+
+            <div class="col-sm-10 my-1" id="other-div" name="other-div" style="display: none;">
+                <center><label>Other Number: <input type="text" class="form-control" name="other_phone"
+                                                    placeholder="07XX XXX XXX"></label></center>
+            </div>
+            <div class="col-sm-10 my-1">
+                <center><label>Amount(KES): <input type="number" class="form-control" name="amount" required="1"
+                ></label></center>
+            </div>
+            <div class="col-sm-10 my-1">
+                <button type="submit" class="btn btn-primary btn-block">Buy Airtime</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock content %}
+
+

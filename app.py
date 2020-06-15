@@ -1,70 +1,73 @@
+import json
+import os
+from flask_script import Manager
+import waitress
+from paste.translogger import TransLogger
 from flask import Flask, render_template, request, redirect
-from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
+from publisher import QueuePublisherClient
+from config import _logger
 from datetime import datetime
 
+csrf = CSRFProtect()
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
-# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+csrf.init_app(app)
+
+app.config['SECRET_KEY'] = 'a5JnWStv0cqY5KPbx$VMejEBP0REnfpP9PaD^dnECOljHS'
 
 
-class Grocery(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False,
-                           default=datetime.utcnow)
+def post_rabbitmq(data, queue_name="mpesa-queue"):
+    msg = "post_rabbitmq", "queue: {}  data: {}".format(queue_name, data)
+    _logger.info(f'airtime_web API post_rabbitmq: {msg}')
+    push = QueuePublisherClient(queue_name, json.dumps(data))  # json.dumps(res).__str__())
+    _logger.info(f'airtime_web API post_rabbitmq: {data}')
+    push.on_response_connected()
 
-    def __repr__(self):
-        return '<Grocery %r>' % self.name
+
+def validate_phone(phone):
+    pass
 
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        name = request.form['name']
-        new_stuff = Grocery(name=name)
+        _logger.info(f'USSD API POST vals: {request.form}')
+        own_phone = request.form['own_phone']
+        other_phone = request.form.get('other_phone')
+        amount = request.form.get('amount')
+        timestamp = datetime.now().timestamp()
+
+        if not own_phone or not amount:
+            return "Not sure what are you trying to achieve"
+
+        if not other_phone:
+            other_phone = own_phone
+
+        other_phone = f"+254{other_phone[1:]}"
 
         try:
-            db.session.add(new_stuff)
-            db.session.commit()
-            return redirect('/')
-        except:
-            return "There was a problem adding new stuff."
+            data = {'recipient_number': other_phone,
+                    'sender_number': f"+254{own_phone[1:]}",
+                    'amount': amount,
+                    'timestamp': str(timestamp)}
+
+            post_rabbitmq(data)
+            res = redirect('/')
+            res.set_cookie('own_phone', own_phone)
+            return res
+        except Exception as ex:
+            return f"Contact Admin if issues persists Error: {str(ex)}: info@bigmachini.net"
 
     else:
-        groceries = Grocery.query.order_by(Grocery.created_at).all()
-        return render_template('index.html', groceries=groceries)
-
-
-@app.route('/delete/<int:id>')
-def delete(id):
-    grocery = Grocery.query.get_or_404(id)
-
-    try:
-        db.session.delete(grocery)
-        db.session.commit()
-        return redirect('/')
-    except:
-        return "There was a problem deleting data."
-
-
-@app.route('/update/<int:id>', methods=['GET', 'POST'])
-def update(id):
-    grocery = Grocery.query.get_or_404(id)
-
-    if request.method == 'POST':
-        grocery.name = request.form['name']
-
-        try:
-            db.session.commit()
-            return redirect('/')
-        except:
-            return "There was a problem updating data."
-
-    else:
-        title = "Update Data"
-        return render_template('update.html', title=title, grocery=grocery)
+        own_phone = request.cookies.get('own_phone', '')
+        return render_template('create.html', own_phone=own_phone)
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    manager = Manager(app)
+    manager.add_command('runserver', waitress.serve(TransLogger(app, setup_console_handler=False),
+                                                    url_scheme='http',
+                                                    host='0.0.0.0',
+                                                    port=int(os.environ.get('PORT', 9006))))
+
+    manager.run()
